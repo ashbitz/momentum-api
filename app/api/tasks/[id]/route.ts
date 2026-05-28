@@ -1,0 +1,176 @@
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { query } from '@/lib/db';
+
+type TaskRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  priority: string;
+  due_date: string | null;
+  is_completed: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type RouteContext = {
+  params: Promise<{
+    id: string;
+  }>;
+};
+
+const updateTaskSchema = z.object({
+  title: z.string().min(3).optional(),
+  description: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
+  due_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
+  is_completed: z.boolean().optional(),
+});
+
+export async function GET(
+  _request: Request,
+  context: RouteContext
+) {
+  try {
+    const { id } = await context.params;
+
+    const [task] = await query<TaskRow>(
+      `SELECT
+        id,
+        title,
+        description,
+        category,
+        priority,
+        due_date::text AS due_date,
+        is_completed,
+        created_at,
+        updated_at
+      FROM tasks
+      WHERE id = $1`,
+      [id]
+    );
+
+    if (!task) {
+      return NextResponse.json(
+        { error: 'Tarea no encontrada' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(task);
+  } catch {
+    return NextResponse.json(
+      { error: 'Error interno' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  context: RouteContext
+) {
+  try {
+    const { id } = await context.params;
+    const body = await request.json();
+    const result = updateTaskSchema.safeParse(body);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { errors: result.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const {
+      title,
+      description,
+      category,
+      priority,
+      due_date,
+      is_completed,
+    } = result.data;
+
+    const [task] = await query<TaskRow>(
+      `UPDATE tasks
+      SET
+        title = COALESCE($1, title),
+        description = COALESCE($2, description),
+        category = COALESCE($3, category),
+        priority = COALESCE($4, priority),
+        due_date = COALESCE($5, due_date),
+        is_completed = COALESCE($6, is_completed),
+        updated_at = NOW()
+      WHERE id = $7
+      RETURNING
+        id,
+        title,
+        description,
+        category,
+        priority,
+        due_date::text AS due_date,
+        is_completed,
+        created_at,
+        updated_at`,
+      [
+        title ?? null,
+        description ?? null,
+        category ?? null,
+        priority ?? null,
+        due_date ?? null,
+        is_completed ?? null,
+        id,
+      ]
+    );
+
+    if (!task) {
+      return NextResponse.json(
+        { error: 'Tarea no encontrada' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(task);
+  } catch {
+    return NextResponse.json(
+      { error: 'Error interno' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  context: RouteContext
+) {
+  try {
+    const { id } = await context.params;
+
+    const [task] = await query<{ id: string }>(
+      `DELETE FROM tasks
+      WHERE id = $1
+      RETURNING id`,
+      [id]
+    );
+
+    if (!task) {
+      return NextResponse.json(
+        { error: 'Tarea no encontrada' },
+        { status: 404 }
+      );
+    }
+
+    return new Response(null, { status: 204 });
+  } catch {
+    return NextResponse.json(
+      { error: 'Error interno' },
+      { status: 500 }
+    );
+  }
+}
