@@ -10,6 +10,7 @@ type TaskRow = {
   priority: string;
   due_date: string | null;
   is_completed: boolean;
+  color: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -21,6 +22,7 @@ const taskSchema = z.object({
   priority: z.enum(['low', 'medium', 'high']).optional(),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   is_completed: z.boolean().optional(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
 });
 
 export async function GET() {
@@ -34,6 +36,7 @@ export async function GET() {
         priority,
         due_date::text AS due_date,
         is_completed,
+        color,
         created_at,
         updated_at
       FROM tasks
@@ -68,6 +71,7 @@ export async function POST(request: Request) {
       priority,
       due_date,
       is_completed,
+      color,
     } = result.data;
 
     const [task] = await query<TaskRow>(
@@ -77,9 +81,10 @@ export async function POST(request: Request) {
         category,
         priority,
         due_date,
-        is_completed
+        is_completed,
+        color
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING
         id,
         title,
@@ -88,6 +93,7 @@ export async function POST(request: Request) {
         priority,
         due_date::text AS due_date,
         is_completed,
+        color,
         created_at,
         updated_at`,
       [
@@ -97,6 +103,7 @@ export async function POST(request: Request) {
         priority ?? 'medium',
         due_date ?? null,
         is_completed ?? false,
+        color ?? null,
       ]
     );
 

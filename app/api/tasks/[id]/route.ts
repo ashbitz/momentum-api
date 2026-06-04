@@ -10,6 +10,7 @@ type TaskRow = {
   priority: string;
   due_date: string | null;
   is_completed: boolean;
+  color: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -31,6 +32,11 @@ const updateTaskSchema = z.object({
     .nullable()
     .optional(),
   is_completed: z.boolean().optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/)
+    .nullable()
+    .optional(),
 });
 
 export async function GET(
@@ -49,6 +55,7 @@ export async function GET(
         priority,
         due_date::text AS due_date,
         is_completed,
+        color,
         created_at,
         updated_at
       FROM tasks
@@ -95,6 +102,7 @@ export async function PATCH(
       priority,
       due_date,
       is_completed,
+      color,
     } = result.data;
 
     const [task] = await query<TaskRow>(
@@ -106,8 +114,9 @@ export async function PATCH(
         priority = COALESCE($4, priority),
         due_date = COALESCE($5, due_date),
         is_completed = COALESCE($6, is_completed),
+        color = COALESCE($7, color),
         updated_at = NOW()
-      WHERE id = $7
+      WHERE id = $8
       RETURNING
         id,
         title,
@@ -116,6 +125,7 @@ export async function PATCH(
         priority,
         due_date::text AS due_date,
         is_completed,
+        color,
         created_at,
         updated_at`,
       [
@@ -125,6 +135,7 @@ export async function PATCH(
         priority ?? null,
         due_date ?? null,
         is_completed ?? null,
+        color ?? null,
         id,
       ]
     );

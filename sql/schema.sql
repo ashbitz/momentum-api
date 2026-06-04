@@ -30,6 +30,7 @@ CREATE TABLE tasks (
   priority VARCHAR(20) NOT NULL DEFAULT 'medium',
   due_date DATE,
   is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  color VARCHAR(7),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
