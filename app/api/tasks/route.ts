@@ -22,7 +22,11 @@ const taskSchema = z.object({
   priority: z.enum(['low', 'medium', 'high']).optional(),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   is_completed: z.boolean().optional(),
-  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/)
+    .nullable()
+    .optional(),
 });
 
 export async function GET() {
