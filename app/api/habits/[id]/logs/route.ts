@@ -20,7 +20,7 @@ type RouteContext = {
 
 const habitLogSchema = z.object({
   log_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  value: z.number().int().nonnegative().optional(),
+  value: z.number().int().positive().optional(),
   is_completed: z.boolean().optional(),
 });
 
@@ -77,6 +77,8 @@ export async function POST(
       is_completed,
     } = result.data;
 
+    const incrementValue = value ?? 1;
+
     const [log] = await query<HabitLogRow>(
       `INSERT INTO habit_logs (
         habit_id,
@@ -84,7 +86,31 @@ export async function POST(
         value,
         is_completed
       )
-      VALUES ($1, $2, $3, $4)
+      VALUES (
+        $1,
+        $2,
+        $3,
+        COALESCE(
+          $4,
+          $3 >= (
+            SELECT target
+            FROM habits
+            WHERE id = $1
+          )
+        )
+      )
+      ON CONFLICT (habit_id, log_date)
+      DO UPDATE SET
+        value = habit_logs.value + EXCLUDED.value,
+        is_completed = COALESCE(
+          $4,
+          habit_logs.value + EXCLUDED.value >= (
+            SELECT target
+            FROM habits
+            WHERE id = $1
+          )
+        ),
+        updated_at = NOW()
       RETURNING
         id,
         habit_id,
@@ -96,10 +122,17 @@ export async function POST(
       [
         id,
         log_date,
-        value ?? 1,
-        is_completed ?? false,
+        incrementValue,
+        is_completed ?? null,
       ]
     );
+
+    if (!log) {
+      return NextResponse.json(
+        { error: 'Hábito no encontrado' },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json(log, { status: 201 });
   } catch {
