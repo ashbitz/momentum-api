@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 
 type NoteRow = {
@@ -19,8 +21,14 @@ const noteSchema = z.object({
   is_pinned: z.boolean().optional(),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const notes = await query<NoteRow>(
       `SELECT
         id,
@@ -31,7 +39,9 @@ export async function GET() {
         created_at,
         updated_at
       FROM notes
-      ORDER BY created_at DESC`
+      WHERE user_id = $1
+      ORDER BY created_at DESC`,
+      [authResult.userId]
     );
 
     return NextResponse.json(notes);
@@ -45,6 +55,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const body = await request.json();
     const result = noteSchema.safeParse(body);
 
@@ -64,12 +80,13 @@ export async function POST(request: Request) {
 
     const [note] = await query<NoteRow>(
       `INSERT INTO notes (
+        user_id,
         title,
         content,
         color,
         is_pinned
       )
-      VALUES ($1, $2, $3, $4)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING
         id,
         title,
@@ -79,6 +96,7 @@ export async function POST(request: Request) {
         created_at,
         updated_at`,
       [
+        authResult.userId,
         title,
         content ?? null,
         color ?? null,

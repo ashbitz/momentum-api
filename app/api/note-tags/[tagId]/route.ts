@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+
+import { requireUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 
 type RouteContext = {
@@ -8,17 +10,28 @@ type RouteContext = {
 };
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { tagId } = await context.params;
 
     const [tag] = await query<{ id: string }>(
       `DELETE FROM note_tags
       WHERE id = $1
+        AND note_id IN (
+          SELECT id
+          FROM notes
+          WHERE user_id = $2
+        )
       RETURNING id`,
-      [tagId]
+      [tagId, authResult.userId]
     );
 
     if (!tag) {

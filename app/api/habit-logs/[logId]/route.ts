@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 
 type HabitLogRow = {
@@ -28,6 +30,12 @@ export async function PATCH(
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { logId } = await context.params;
     const body = await request.json();
     const result = updateHabitLogSchema.safeParse(body);
@@ -48,6 +56,11 @@ export async function PATCH(
         is_completed = COALESCE($2, is_completed),
         updated_at = NOW()
       WHERE id = $3
+        AND habit_id IN (
+          SELECT id
+          FROM habits
+          WHERE user_id = $4
+        )
       RETURNING
         id,
         habit_id,
@@ -60,6 +73,7 @@ export async function PATCH(
         value ?? null,
         is_completed ?? null,
         logId,
+        authResult.userId,
       ]
     );
 
@@ -80,17 +94,28 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { logId } = await context.params;
 
     const [log] = await query<{ id: string }>(
       `DELETE FROM habit_logs
       WHERE id = $1
+        AND habit_id IN (
+          SELECT id
+          FROM habits
+          WHERE user_id = $2
+        )
       RETURNING id`,
-      [logId]
+      [logId, authResult.userId]
     );
 
     if (!log) {

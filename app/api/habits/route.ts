@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 
 type HabitRow = {
@@ -24,8 +26,14 @@ const habitSchema = z.object({
   unit: z.string().optional(),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const habits = await query<HabitRow>(
       `SELECT 
         id,
@@ -39,7 +47,9 @@ export async function GET() {
         created_at,
         updated_at
       FROM habits
-      ORDER BY created_at DESC`
+      WHERE user_id = $1
+      ORDER BY created_at DESC`,
+      [authResult.userId]
     );
 
     return NextResponse.json(habits);
@@ -53,6 +63,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const body = await request.json();
     const result = habitSchema.safeParse(body);
 
@@ -74,6 +90,7 @@ export async function POST(request: Request) {
 
     const [habit] = await query<HabitRow>(
       `INSERT INTO habits (
+        user_id,
         title,
         description,
         frequency,
@@ -81,7 +98,7 @@ export async function POST(request: Request) {
         target,
         unit
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING 
         id,
         title,
@@ -94,6 +111,7 @@ export async function POST(request: Request) {
         created_at,
         updated_at`,
       [
+        authResult.userId,
         title,
         description ?? null,
         frequency ?? 'daily',

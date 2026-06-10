@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 
 type HabitRow = {
@@ -32,10 +34,16 @@ const updateHabitSchema = z.object({
 });
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { id } = await context.params;
 
     const [habit] = await query<HabitRow>(
@@ -51,8 +59,8 @@ export async function GET(
         created_at,
         updated_at
       FROM habits
-      WHERE id = $1`,
-      [id]
+      WHERE id = $1 AND user_id = $2`,
+      [id, authResult.userId]
     );
 
     if (!habit) {
@@ -76,6 +84,12 @@ export async function PATCH(
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { id } = await context.params;
     const body = await request.json();
     const result = updateHabitSchema.safeParse(body);
@@ -108,7 +122,7 @@ export async function PATCH(
         unit = COALESCE($6, unit),
         is_active = COALESCE($7, is_active),
         updated_at = NOW()
-      WHERE id = $8
+      WHERE id = $8 AND user_id = $9
       RETURNING
         id,
         title,
@@ -129,6 +143,7 @@ export async function PATCH(
         unit ?? null,
         is_active ?? null,
         id,
+        authResult.userId,
       ]
     );
 
@@ -149,17 +164,23 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { id } = await context.params;
 
     const [habit] = await query<{ id: string }>(
       `DELETE FROM habits
-      WHERE id = $1
+      WHERE id = $1 AND user_id = $2
       RETURNING id`,
-      [id]
+      [id, authResult.userId]
     );
 
     if (!habit) {

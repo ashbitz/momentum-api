@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 
 type NoteRow = {
@@ -26,10 +28,16 @@ const updateNoteSchema = z.object({
 });
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { id } = await context.params;
 
     const [note] = await query<NoteRow>(
@@ -42,8 +50,8 @@ export async function GET(
         created_at,
         updated_at
       FROM notes
-      WHERE id = $1`,
-      [id]
+      WHERE id = $1 AND user_id = $2`,
+      [id, authResult.userId]
     );
 
     if (!note) {
@@ -67,6 +75,12 @@ export async function PATCH(
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { id } = await context.params;
     const body = await request.json();
     const result = updateNoteSchema.safeParse(body);
@@ -93,7 +107,7 @@ export async function PATCH(
         color = COALESCE($3, color),
         is_pinned = COALESCE($4, is_pinned),
         updated_at = NOW()
-      WHERE id = $5
+      WHERE id = $5 AND user_id = $6
       RETURNING
         id,
         title,
@@ -108,6 +122,7 @@ export async function PATCH(
         color ?? null,
         is_pinned ?? null,
         id,
+        authResult.userId,
       ]
     );
 
@@ -128,17 +143,23 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { id } = await context.params;
 
     const [note] = await query<{ id: string }>(
       `DELETE FROM notes
-      WHERE id = $1
+      WHERE id = $1 AND user_id = $2
       RETURNING id`,
-      [id]
+      [id, authResult.userId]
     );
 
     if (!note) {

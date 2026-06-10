@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 
 type TaskRow = {
@@ -29,8 +31,14 @@ const taskSchema = z.object({
     .optional(),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const tasks = await query<TaskRow>(
       `SELECT
         id,
@@ -44,7 +52,9 @@ export async function GET() {
         created_at,
         updated_at
       FROM tasks
-      ORDER BY created_at DESC`
+      WHERE user_id = $1
+      ORDER BY created_at DESC`,
+      [authResult.userId]
     );
 
     return NextResponse.json(tasks);
@@ -58,6 +68,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const body = await request.json();
     const result = taskSchema.safeParse(body);
 
@@ -80,6 +96,7 @@ export async function POST(request: Request) {
 
     const [task] = await query<TaskRow>(
       `INSERT INTO tasks (
+        user_id,
         title,
         description,
         category,
@@ -88,7 +105,7 @@ export async function POST(request: Request) {
         is_completed,
         color
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING
         id,
         title,
@@ -101,6 +118,7 @@ export async function POST(request: Request) {
         created_at,
         updated_at`,
       [
+        authResult.userId,
         title,
         description ?? null,
         category ?? null,

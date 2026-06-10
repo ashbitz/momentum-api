@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 
 type TaskRow = {
@@ -40,10 +42,16 @@ const updateTaskSchema = z.object({
 });
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { id } = await context.params;
 
     const [task] = await query<TaskRow>(
@@ -59,8 +67,8 @@ export async function GET(
         created_at,
         updated_at
       FROM tasks
-      WHERE id = $1`,
-      [id]
+      WHERE id = $1 AND user_id = $2`,
+      [id, authResult.userId]
     );
 
     if (!task) {
@@ -84,6 +92,12 @@ export async function PATCH(
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { id } = await context.params;
     const body = await request.json();
     const result = updateTaskSchema.safeParse(body);
@@ -116,7 +130,7 @@ export async function PATCH(
         is_completed = COALESCE($6, is_completed),
         color = COALESCE($7, color),
         updated_at = NOW()
-      WHERE id = $8
+      WHERE id = $8 AND user_id = $9
       RETURNING
         id,
         title,
@@ -137,6 +151,7 @@ export async function PATCH(
         is_completed ?? null,
         color ?? null,
         id,
+        authResult.userId,
       ]
     );
 
@@ -157,17 +172,23 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: RouteContext
 ) {
   try {
+    const authResult = await requireUser(request);
+
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const { id } = await context.params;
 
     const [task] = await query<{ id: string }>(
       `DELETE FROM tasks
-      WHERE id = $1
+      WHERE id = $1 AND user_id = $2
       RETURNING id`,
-      [id]
+      [id, authResult.userId]
     );
 
     if (!task) {
